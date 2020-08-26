@@ -6,5 +6,5 @@ tested on the HDFS dataset from LogHub:
 Unsupervised Models:
 <ul>
 <li>RNN-seq2seq model - f1 score: 0.6197</li>
-<li>->LDA, Stacked Denoising Autoencoder - f1 score: 0.7101</li>
+<li>LDA, Stacked Denoising Autoencoder - f1 score: 0.7101</li>
 </ul>
