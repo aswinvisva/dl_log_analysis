@@ -15,15 +15,15 @@ from sklearn.decomposition import LatentDirichletAllocation
 device = torch.device("cuda")
 
 
-def run_sda(n_topics=5):
+def run_sdae(n_topics=32):
     (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS_100k.log_structured.csv',
-                                                                label_file='data/anomaly_label.csv')
+                                                                label_file='data/anomaly_label.csv',
+                                                                train_ratio=0.6)
+    x_train = x_train[y_train != 1]
+
     f = FeatureExtractor()
     x_train = f.fit_transform(x_train)
     x_test = f.transform(x_test)
-
-    print(np.array(x_train).shape)
-    print(np.array(x_test).shape)
 
     lda = LatentDirichletAllocation(n_components=n_topics)
     x_train = lda.fit_transform(x_train)
@@ -31,8 +31,6 @@ def run_sda(n_topics=5):
 
     x_train = torch.tensor(x_train, dtype=torch.float, device=device)
     x_test = torch.tensor(x_test, dtype=torch.float, device=device)
-
-    print(x_train)
 
     train_loader = LDADataset(x_train, x_train)
     test_loader = LDADataset(x_test, x_test)
@@ -67,7 +65,8 @@ def run_deeplog(window_size=4):
 
 def run_seq2seq():
     (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS_100k.log_structured.csv',
-                                                                label_file='data/anomaly_label.csv')
+                                                                label_file='data/anomaly_label.csv',
+                                                                train_ratio=0.8)
 
     tknzr = Tokenizer(lower=True, split=" ")
     tknzr.fit_on_texts(x_train)
@@ -128,4 +127,4 @@ def run_seq2seq():
 
 
 if __name__ == '__main__':
-    run_sda()
+    run_sdae()

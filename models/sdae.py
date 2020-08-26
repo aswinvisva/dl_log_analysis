@@ -14,21 +14,21 @@ class SDAE(nn.Module):
         super(SDAE, self).__init__()
 
         self.encoder = nn.Sequential(
-            nn.Linear(n_topics, 100),
+            nn.Linear(n_topics, 16),
             nn.Sigmoid(),
-            nn.Linear(100, 150),
+            nn.Linear(16, 32),
             nn.Sigmoid()
         )
 
         self.decoder = nn.Sequential(
-            nn.Linear(150, 100),
+            nn.Linear(32, 16),
             nn.Sigmoid(),
-            nn.Linear(100, n_topics),
+            nn.Linear(16, n_topics),
             nn.Sigmoid()
         )
 
         self.criterion = nn.MSELoss()
-        self.rl_threshold = 0.001
+        self.rl_threshold = 1e-5
         self.device = torch.device("cuda")
 
     def forward(self, data_dict):
@@ -72,6 +72,7 @@ class SDAE(nn.Module):
                 y_true = batch_input[1]
 
                 reconstruction_loss = torch.mean(torch.square(y_pred - y_true)).data.cpu().numpy()
+                print(reconstruction_loss)
 
                 anomaly_pred.append(reconstruction_loss > self.rl_threshold)
 
