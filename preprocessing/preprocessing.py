@@ -16,6 +16,16 @@ from itertools import compress
 from torch.utils.data import DataLoader, Dataset
 
 
+class LDADataset(Dataset):
+    def __init__(self, x, y, batch_size=32, shuffle=False, num_workers=1):
+        self.iter = DataLoader(dataset=self, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+        self.x = x
+        self.y = y
+
+    def __getitem__(self, index):
+        return self.x[index], self.y[index]
+
+
 class Iterator(Dataset):
     def __init__(self, data_dict, batch_size=32, shuffle=False, num_workers=1):
         self.data_dict = data_dict

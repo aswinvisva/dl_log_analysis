@@ -1,17 +1,71 @@
 import numpy as np
 import torch
 
-from models.seq2seq import EncoderRNN, DecoderRNN, trainIters, tensorFromSentence, MAX_LENGTH, tensorsFromPair
+from models.lstm_next_key import DeepLog
+from models.seq2seq import EncoderRNN, DecoderRNN, trainIters, MAX_LENGTH, tensorsFromPair
+from models.sdae import SDAE
 from preprocessing.preprocessing import *
 from preprocessing import dataloader
-from tensorflow.keras.preprocessing.text import Tokenizer, text_to_word_sequence
+from tensorflow.keras.preprocessing.text import Tokenizer
 from sklearn.cluster import KMeans
 from sklearn.metrics import *
+from torch.utils.data import DataLoader, Dataset
+from sklearn.decomposition import LatentDirichletAllocation
 
 device = torch.device("cuda")
 
 
-def main():
+def run_sda(n_topics=5):
+    (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS_100k.log_structured.csv',
+                                                                label_file='data/anomaly_label.csv')
+    f = FeatureExtractor()
+    x_train = f.fit_transform(x_train)
+    x_test = f.transform(x_test)
+
+    print(np.array(x_train).shape)
+    print(np.array(x_test).shape)
+
+    lda = LatentDirichletAllocation(n_components=n_topics)
+    x_train = lda.fit_transform(x_train)
+    x_test = lda.transform(x_test)
+
+    x_train = torch.tensor(x_train, dtype=torch.float, device=device)
+    x_test = torch.tensor(x_test, dtype=torch.float, device=device)
+
+    print(x_train)
+
+    train_loader = LDADataset(x_train, x_train)
+    test_loader = LDADataset(x_test, x_test)
+
+    model = SDAE(n_topics=n_topics)
+    model.fit(train_loader, 3)
+    model.evaluate(test_loader, y_test)
+
+
+def run_deeplog(window_size=4):
+    (x_train, window_y_train, y_train), (x_test, window_y_test, y_test) = dataloader.load_HDFS(
+        'data/HDFS_100k.log_structured.csv', label_file='data/anomaly_label.csv', window='session',
+        window_size=window_size, train_ratio=0.2, split_type='uniform')
+
+    feature_extractor = Vectorizer()
+    train_dataset = feature_extractor.fit_transform(x_train, window_y_train, y_train)
+    test_dataset = feature_extractor.transform(x_test, window_y_test, y_test)
+
+    train_loader = Iterator(train_dataset, batch_size=32, shuffle=True, num_workers=2).iter
+    test_loader = Iterator(test_dataset, batch_size=32, shuffle=False, num_workers=2).iter
+
+    model = DeepLog(num_labels=feature_extractor.num_labels, hidden_size=32, num_directions=2,
+                    topk=5, device=device)
+    model.fit(train_loader, 50)
+
+    print('Train validation:')
+    metrics = model.evaluate(train_loader)
+
+    print('Test validation:')
+    metrics = model.evaluate(test_loader)
+
+
+def run_seq2seq():
     (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS_100k.log_structured.csv',
                                                                 label_file='data/anomaly_label.csv')
 
@@ -74,4 +128,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    run_sda()
