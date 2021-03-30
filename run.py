@@ -7,7 +7,7 @@ from models.sdae import SDAE
 from preprocessing.preprocessing import *
 from preprocessing import dataloader
 from tensorflow.keras.preprocessing.text import Tokenizer
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.decomposition import LatentDirichletAllocation
@@ -81,12 +81,12 @@ def run_seq2seq():
     print(tknzr.word_index.keys())
     print(X_test)
 
-    hidden_size = 4
+    hidden_size = 32
     encoder1 = EncoderRNN(len(tknzr.word_index.keys()) + 3, hidden_size).to(device)
     decoder1 = DecoderRNN(hidden_size, len(tknzr.word_index.keys()) + 3).to(device)
     encoder_hidden = encoder1.initHidden()
 
-    trainIters(encoder1, decoder1, X_train, 50000, print_every=100)
+    trainIters(encoder1, decoder1, X_train, 5000, print_every=100)
 
     testing_pairs = [tensorsFromPair(i) for i in X_test]
 
@@ -106,11 +106,17 @@ def run_seq2seq():
                 input_tensor[ei], encoder_hidden)
             encoder_outputs[ei] = encoder_output[0, 0]
 
-        y_pred_outputs.append(encoder_outputs.cpu().data.numpy().flatten())
+        y_pred_outputs.append(encoder_output.cpu().data.numpy().flatten())
 
         # x_test_output = encoder1(x_test)
-    kmeans = KMeans(n_clusters=2)
-    y_pred = kmeans.fit_predict(y_pred_outputs)
+    # kmeans = KMeans(n_clusters=2)
+    # y_pred = kmeans.fit_predict(y_pred_outputs)
+
+    dbscan = DBSCAN(eps=0.075, min_samples=100,  metric="cosine")
+    y_pred = dbscan.fit_predict(y_pred_outputs).tolist()
+
+    y_pred = np.array([1 if i == -1 else 0 for i in y_pred])
+
     print(len(y_pred))
     print(len(y_test))
 
@@ -124,6 +130,8 @@ def run_seq2seq():
     print("completeness_score: %s" % str(completeness_score(y_test, y_pred)))
     print("v_measure_score: %s" % str(v_measure_score(y_test, y_pred)))
     print("F1 score %s" % str(f1_score(y_test, y_pred)))
+    print("Precision score %s" % str(precision_score(y_test, y_pred)))
+    print("Recall score %s" % str(recall_score(y_test, y_pred)))
 
 
 if __name__ == '__main__':
