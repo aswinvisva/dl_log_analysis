@@ -16,14 +16,28 @@ from itertools import compress
 from torch.utils.data import DataLoader, Dataset
 
 
+def collate_fn(data):
+    x_list = []
+    y_list = []
+    for d in data:
+        x_list.append(d[0])
+        y_list.append(d[1])
+
+    x = torch.vstack(x_list)
+    y = torch.vstack(y_list)
+
+    return x, y
+
 class LDADataset(Dataset):
-    def __init__(self, x, y, batch_size=32, shuffle=False, num_workers=1):
-        self.iter = DataLoader(dataset=self, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+    def __init__(self, x, y, batch_size=32, shuffle=False, num_workers=8):
         self.x = x
         self.y = y
 
     def __getitem__(self, index):
         return self.x[index], self.y[index]
+
+    def __len__(self):
+        return self.x.shape[0]
 
 
 class Iterator(Dataset):

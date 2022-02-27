@@ -69,24 +69,36 @@ class DeepLog(nn.Module):
 
     def evaluate(self, test_loader):
         self.eval()  # set to evaluation mode
+        session_level_results = {}
         with torch.no_grad():
             y_pred = []
             store_dict = defaultdict(list)
+            i=0
             for batch_input in test_loader:
                 return_dict = self.forward(batch_input)
                 y_pred = return_dict["y_pred"]
-
-                store_dict["SessionId"].extend(batch_input["SessionId"].data.cpu().numpy().reshape(-1))
-                store_dict["y"].extend(batch_input["y"].data.cpu().numpy().reshape(-1))
-                store_dict["window_y"].extend(batch_input["window_y"].data.cpu().numpy().reshape(-1))
+                sessions = batch_input["SessionId"].data.cpu().numpy().reshape(-1)
+                targets = batch_input["y"].data.cpu().numpy().reshape(-1)
                 window_prob, window_pred = torch.max(y_pred, 1)
+                window_y = batch_input["window_y"].data.cpu().numpy().reshape(-1)
+                top_indice = torch.topk(y_pred, self.topk)[1]  # b x topk
+                store_dict["SessionId"].extend(sessions)
+                store_dict["y"].extend(targets)
+                store_dict["window_y"].extend(window_y)
                 store_dict["window_pred"].extend(window_pred.data.cpu().numpy().reshape(-1))
                 store_dict["window_prob"].extend(window_prob.data.cpu().numpy().reshape(-1))
-                top_indice = torch.topk(y_pred, self.topk)[1]  # b x topk
                 store_dict["topk_indice"].extend(top_indice.data.cpu().numpy())
+
+                i+=1
+                if i % 100 == 0:
+                    print(f"Done batch {i}/{len(test_loader)}")
 
             window_pred = store_dict["window_pred"]
             window_y = store_dict["window_y"]
+
+            sessions = session_level_results.keys()
+            session_pred = [session_level_results[session]["pred"] for session in sessions]
+            session_target = [session_level_results[session]["target"] for session in sessions]
 
             store_df = pd.DataFrame(store_dict)
             store_df["anomaly"] = store_df.apply(lambda x: x["window_y"] not in x["topk_indice"], axis=1).astype(int)
@@ -100,7 +112,7 @@ class DeepLog(nn.Module):
 
             metrics = {"window_acc": accuracy_score(window_y, window_pred),
                        "session_acc": accuracy_score(y_true, y_pred),
-                       "f1": f1_score(y_true, y_pred),
+                       "session_f1": f1_score(y_true, y_pred),
                        "recall": recall_score(y_true, y_pred),
                        "precision": precision_score(y_true, y_pred)}
             print([(k, round(v, 5)) for k, v in metrics.items()])

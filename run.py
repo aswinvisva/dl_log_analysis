@@ -11,57 +11,60 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda")
 
 
-def run_sdae(n_topics=32):
-    (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS_100k.log_structured.csv',
-                                                                label_file='data/anomaly_label.csv',
-                                                                train_ratio=0.6)
-    x_train = x_train[y_train != 1]
+def run_sdae(n_topics=8):
+    (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS.npz',
+                                                                train_ratio=0.5)
 
     f = FeatureExtractor()
     x_train = f.fit_transform(x_train)
     x_test = f.transform(x_test)
 
-    lda = LatentDirichletAllocation(n_components=n_topics)
+    lda = LatentDirichletAllocation(n_components=n_topics, n_jobs=8)
     x_train = lda.fit_transform(x_train)
     x_test = lda.transform(x_test)
+
+    x_train = x_train[y_train != 1]
 
     x_train = torch.tensor(x_train, dtype=torch.float, device=device)
     x_test = torch.tensor(x_test, dtype=torch.float, device=device)
 
     train_loader = LDADataset(x_train, x_train)
     test_loader = LDADataset(x_test, x_test)
+    train_loader = DataLoader(dataset=train_loader, batch_size=2048, shuffle=False)
+    test_loader = DataLoader(dataset=test_loader, batch_size=2048, shuffle=False)
 
     model = SDAE(n_topics=n_topics)
-    model.fit(train_loader, 3)
-    model.evaluate(test_loader, y_test)
+    model.fit(train_loader, 10)
+    metrics, predictions, anomalies = model.evaluate(test_loader, y_test)
 
+    X_embedded = TSNE(n_components=2, learning_rate='auto', init='random', n_jobs=8).fit_transform(predictions)
 
-def run_deeplog(window_size=4):
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=anomalies)
+    plt.savefig("tsne.png")
+    plt.clf()
+
+def run_deeplog(window_size=10):
     (x_train, window_y_train, y_train), (x_test, window_y_test, y_test) = dataloader.load_HDFS(
-        'data/HDFS_100k.log_structured.csv', label_file='data/anomaly_label.csv', window='session',
-        window_size=window_size, train_ratio=0.2, split_type='uniform')
+        'data/HDFS.npz', window='session', window_size=window_size, train_ratio=0.025, split_type='uniform')
 
     feature_extractor = Vectorizer()
     train_dataset = feature_extractor.fit_transform(x_train, window_y_train, y_train)
     test_dataset = feature_extractor.transform(x_test, window_y_test, y_test)
 
-    train_loader = Iterator(train_dataset, batch_size=32, shuffle=True, num_workers=2).iter
-    test_loader = Iterator(test_dataset, batch_size=32, shuffle=False, num_workers=2).iter
+    train_loader = Iterator(train_dataset, batch_size=5192, shuffle=True, num_workers=4).iter
+    test_loader = Iterator(test_dataset, batch_size=5192, shuffle=False, num_workers=4).iter
 
-    model = DeepLog(num_labels=feature_extractor.num_labels, hidden_size=32, num_directions=2,
-                    topk=5, device=device)
-    model.fit(train_loader, 50)
+    model = DeepLog(num_labels=feature_extractor.num_labels, hidden_size=16, num_directions=2,
+                    topk=8, device=device)
+    model.fit(train_loader, 10)
 
-    print('Train validation:')
-    metrics = model.evaluate(train_loader)
-
-    print('Test validation:')
     metrics = model.evaluate(test_loader)
-
 
 def run_seq2seq():
     (x_train, y_train), (x_test, y_test) = dataloader.load_HDFS('data/HDFS_100k.log_structured.csv',
@@ -77,9 +80,6 @@ def run_seq2seq():
 
     X_train = [(x, x) for x in X_train]
     X_test = [(x, x) for x in X_test]
-
-    print(tknzr.word_index.keys())
-    print(X_test)
 
     hidden_size = 32
     encoder1 = EncoderRNN(len(tknzr.word_index.keys()) + 3, hidden_size).to(device)
@@ -108,23 +108,10 @@ def run_seq2seq():
 
         y_pred_outputs.append(encoder_output.cpu().data.numpy().flatten())
 
-        # x_test_output = encoder1(x_test)
-    # kmeans = KMeans(n_clusters=2)
-    # y_pred = kmeans.fit_predict(y_pred_outputs)
-
     dbscan = DBSCAN(eps=0.075, min_samples=100,  metric="cosine")
     y_pred = dbscan.fit_predict(y_pred_outputs).tolist()
 
     y_pred = np.array([1 if i == -1 else 0 for i in y_pred])
-
-    print(len(y_pred))
-    print(len(y_test))
-
-    print(y_pred)
-    print(y_test)
-
-    print(Counter(y_pred))
-    print(Counter(y_test))
 
     print("Homogeneity Score: %s" % str(homogeneity_score(y_test, y_pred)))
     print("completeness_score: %s" % str(completeness_score(y_test, y_pred)))

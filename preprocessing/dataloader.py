@@ -71,10 +71,20 @@ def load_HDFS(log_file, label_file=None, window='session', train_ratio=0.5, spli
 
     if log_file.endswith('.npz'):
         # Split training and validation set in a class-uniform way
-        data = np.load(log_file)
+        data = np.load(log_file, allow_pickle=True)
         x_data = data['x_data']
         y_data = data['y_data']
         (x_train, y_train), (x_test, y_test) = _split_data(x_data, y_data, train_ratio, split_type)
+
+        if window_size > 0:
+            x_train, window_y_train, y_train = slice_hdfs(x_train, y_train, window_size)
+            x_test, window_y_test, y_test = slice_hdfs(x_test, y_test, window_size)
+            log = "{} {} windows ({}/{} anomaly), {}/{} normal"
+            print(log.format("Train:", x_train.shape[0], y_train.sum(), y_train.shape[0], (1 - y_train).sum(),
+                             y_train.shape[0]))
+            print(log.format("Test:", x_test.shape[0], y_test.sum(), y_test.shape[0], (1 - y_test).sum(),
+                             y_test.shape[0]))
+            return (x_train, window_y_train, y_train), (x_test, window_y_test, y_test)
 
     elif log_file.endswith('.csv'):
         assert window == 'session', "Only window=session is supported for HDFS dataset."
